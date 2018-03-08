@@ -38,7 +38,7 @@ public final class ClientRequest {
      * @param expectResponse Should we expect a response message or is this request complete once it is sent?
      * @param callback A callback to execute when the response has been received (or null if no callback is necessary)
      */
-    public ClientRequest(String destination,
+    public ClientRequest(String destination,//node-id
                          AbstractRequest.Builder<?> requestBuilder,
                          int correlationId,
                          String clientId,
