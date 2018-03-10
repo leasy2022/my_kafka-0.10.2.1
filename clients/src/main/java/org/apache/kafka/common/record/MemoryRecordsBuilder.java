@@ -228,6 +228,11 @@ public class MemoryRecordsBuilder {
      * @param value The record value
      * @return crc of the record
      */
+    /*
+    向DataOutputStream中写入一条数据
+    1写入消息头： 数据的偏移量、记录大小
+    2 属性等
+     */
     public long appendWithOffset(long offset, long timestamp, byte[] key, byte[] value) {
         try {
             if (lastOffset >= 0 && offset <= lastOffset)

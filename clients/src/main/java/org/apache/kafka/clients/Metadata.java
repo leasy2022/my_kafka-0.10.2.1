@@ -50,19 +50,19 @@ public final class Metadata {
     public static final long TOPIC_EXPIRY_MS = 5 * 60 * 1000;
     private static final long TOPIC_EXPIRY_NEEDS_UPDATE = -1L;
 
-    private final long refreshBackoffMs;
-    private final long metadataExpireMs;
-    private int version;
-    private long lastRefreshMs;
-    private long lastSuccessfulRefreshMs;
-    private Cluster cluster;
-    private boolean needUpdate;
+    private final long refreshBackoffMs; // metadata 更新失败时,为避免频繁更新 meta,最小的间隔时间,默认 100ms
+    private final long metadataExpireMs; //metadata 的过期时间, 默认 60,000ms
+    private int version; // 每更新成功1次，version自增1,主要是用于判断 metadata 是否更新
+    private long lastRefreshMs; // 最近一次更新时的时间（包含更新失败的情况）
+    private long lastSuccessfulRefreshMs; // 最近一次成功更新的时间（如果每次都成功的话，与前面的值相等, 否则，lastSuccessulRefreshMs < lastRefreshMs)
+    private Cluster cluster; // 集群中一些 topic 的信息
+    private boolean needUpdate; // 是都需要更新 metadata
     /* Topics with expiry time */
-    private final Map<String, Long> topics;
-    private final List<Listener> listeners;
-    private final ClusterResourceListeners clusterResourceListeners;
-    private boolean needMetadataForAllTopics;
-    private final boolean topicExpiryEnabled;
+    private final Map<String, Long> topics; // topic 与其过期时间的对应关系
+    private final List<Listener> listeners; // 事件监控者
+    private final ClusterResourceListeners clusterResourceListeners; //当接收到 metadata 更新时, ClusterResourceListeners的列表
+    private boolean needMetadataForAllTopics; // 是否强制更新所有的 metadata
+    private final boolean topicExpiryEnabled;  // 默认为 true, Producer 会定时移除过期的 topic,consumer 则不会移除
 
     /**
      * Create a metadata instance with reasonable defaults
@@ -85,8 +85,8 @@ public final class Metadata {
      */
     public Metadata(long refreshBackoffMs, long metadataExpireMs, boolean topicExpiryEnabled, ClusterResourceListeners clusterResourceListeners) {
         this.refreshBackoffMs = refreshBackoffMs;
-        this.metadataExpireMs = metadataExpireMs;
-        this.topicExpiryEnabled = topicExpiryEnabled;
+        this.metadataExpireMs = metadataExpireMs;//metadata.max.age.ms
+        this.topicExpiryEnabled = topicExpiryEnabled;//false
         this.lastRefreshMs = 0L;
         this.lastSuccessfulRefreshMs = 0L;
         this.version = 0;
@@ -151,7 +151,7 @@ public final class Metadata {
         }
         long begin = System.currentTimeMillis();
         long remainingWaitMs = maxWaitMs;
-        while (this.version <= lastVersion) {
+        while (this.version <= lastVersion) { //不断循环检验版本信息(元数据是否更新）  退出：元数据更新或超时抛出异常
             if (remainingWaitMs != 0)
                 wait(remainingWaitMs);
             long elapsed = System.currentTimeMillis() - begin;

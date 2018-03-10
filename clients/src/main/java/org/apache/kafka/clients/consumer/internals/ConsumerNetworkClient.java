@@ -66,7 +66,7 @@ public class ConsumerNetworkClient implements Closeable {
     // atomic to avoid the need to acquire the lock above in order to enable it concurrently.
     private final AtomicBoolean wakeup = new AtomicBoolean(false);
 
-    public ConsumerNetworkClient(KafkaClient client,
+    public ConsumerNetworkClient(KafkaClient client,//核心成员： NetworkClient
                                  Metadata metadata,
                                  Time time,
                                  long retryBackoffMs,
@@ -180,6 +180,7 @@ public class ConsumerNetworkClient implements Closeable {
      * @throws WakeupException if {@link #wakeup()} is called from another thread
      * @throws InterruptException if the calling thread is interrupted
      */
+    //阻塞直至 之前的请求结束或超时
     public boolean poll(RequestFuture<?> future, long timeout) {
         long begin = time.milliseconds();
         long remaining = timeout;

@@ -56,6 +56,7 @@ public class DefaultPartitioner implements Partitioner {
         int numPartitions = partitions.size();
         if (keyBytes == null) {
             int nextValue = nextValue(topic);
+            //如果topic下的分区有变化，能立刻 做出调整
             List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
             if (availablePartitions.size() > 0) {
                 int part = Utils.toPositive(nextValue) % availablePartitions.size();

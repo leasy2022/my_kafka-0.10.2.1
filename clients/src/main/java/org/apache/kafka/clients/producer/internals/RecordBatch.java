@@ -32,6 +32,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 
  * This class is not thread safe and external synchronization must be used when modifying it
  */
+/*
+批记录
+ */
 public final class RecordBatch {
 
     private static final Logger log = LoggerFactory.getLogger(RecordBatch.class);
@@ -44,11 +47,11 @@ public final class RecordBatch {
     private final MemoryRecordsBuilder recordsBuilder;
 
     volatile int attempts;
-    int recordCount;
-    int maxRecordSize;
+    int recordCount; // 统计信息：记录放入的条数
+    int maxRecordSize;//统计信息：记录 最大的record字节数 ， 如何计算每条record占用了多少字节数？
     long drainedMs;
     long lastAttemptMs;
-    long lastAppendTime;
+    long lastAppendTime; //统计信息：记录最后一次放入的时间
     private String expiryErrorMessage;
     private AtomicBoolean completed;
     private boolean retry;
@@ -68,19 +71,26 @@ public final class RecordBatch {
      * 
      * @return The RecordSend corresponding to this record or null if there isn't sufficient room.
      */
+    /*
+    把数据放入缓存(MemoryRecordsBuilder)中，
+
+    首先检查是否有足够的空间，没有没有返回null；
+    如果有，则放入，并返回一个FutureRecordMetadata 对象。
+     */
     public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Callback callback, long now) {
         if (!recordsBuilder.hasRoomFor(key, value)) {
-            return null;
+                return null;
         } else {
             long checksum = this.recordsBuilder.append(timestamp, key, value);
             this.maxRecordSize = Math.max(this.maxRecordSize, Record.recordSize(key, value));
             this.lastAppendTime = now;
+            //封装一些统计信息和Future
             FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
                                                                    timestamp, checksum,
                                                                    key == null ? -1 : key.length,
                                                                    value == null ? -1 : value.length);
             if (callback != null)
-                thunks.add(new Thunk(callback, future));
+                thunks.add(new Thunk(callback, future));//如果有回调方法，把 回调方法和Future对象 封装成 Thunk对象。
             this.recordCount++;
             return future;
         }

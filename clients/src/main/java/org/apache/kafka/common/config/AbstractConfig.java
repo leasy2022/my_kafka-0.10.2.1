@@ -201,7 +201,7 @@ public class AbstractConfig {
         if (c == null)
             return null;
         Object o = Utils.newInstance(c);
-        if (!t.isInstance(o))
+        if (!t.isInstance(o))//判断 实现类是否是继承了t
             throw new KafkaException(c.getName() + " is not an instance of " + t.getName());
         if (o instanceof Configurable)
             ((Configurable) o).configure(originals());

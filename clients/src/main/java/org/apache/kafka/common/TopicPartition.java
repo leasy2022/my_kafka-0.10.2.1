@@ -23,7 +23,7 @@ import java.io.Serializable;
  */
 public final class TopicPartition implements Serializable {
 
-    private int hash = 0;
+    private int hash = 0; //hash只需要计算一次，前提： 所有计算hash的成员不能修改
     private final int partition;
     private final String topic;
 

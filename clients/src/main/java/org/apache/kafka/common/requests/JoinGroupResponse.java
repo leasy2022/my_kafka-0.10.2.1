@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// 请求 加入群组 的响应
 public class JoinGroupResponse extends AbstractResponse {
 
     private static final short CURRENT_VERSION = ProtoUtils.latestVersion(ApiKeys.JOIN_GROUP.id);
@@ -54,10 +55,22 @@ public class JoinGroupResponse extends AbstractResponse {
     public static final String UNKNOWN_MEMBER_ID = "";
 
     private final short errorCode;
+    /*
+    年代信息，由于每当有一个consumer加入group都会发生一次rebalance，
+    每次rebalance叫做一个generation并且generationId自增1，
+    因此response中携带该generationId，用来防止由于丢包、重复包等信息，
+    造成ConsumerCoordinator和GroupCoordinator之间发生误解；
+     */
     private final int generationId;
+    /*
+    组协议，看似非常抽象，其实就是指远程的GroupCoordinator确定下来的分区分派方法，
+    即协商一致的分区分派算法。远程的GroupCoordinator会从ConsumerCoordinator的
+    JoinGroup请求中提取该Consumer所支持的分区分派算法，然后选择一个大多数Consumer都支持的算法。
+    如果我们在配置文件里面不进行显式配置，则使用RangeAssigner；
+     */
     private final String groupProtocol;
-    private final String memberId;
-    private final String leaderId;
+    private final String memberId;//远程的GroupCoordinator分配给这个Consumer的唯一id；
+    private final String leaderId;//代表了被选举为leader的consumer的memberId
     private final Map<String, ByteBuffer> members;
 
     public JoinGroupResponse(short errorCode,

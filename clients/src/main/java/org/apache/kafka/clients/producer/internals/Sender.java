@@ -161,11 +161,18 @@ public class Sender implements Runnable {
      * @param now
      *            The current POSIX time in milliseconds
      */
+    /*
+    消息发送线程读取记录收集器，按照node分组，创建客户端需求，进行数据发送
+    1 获取符合发送数据的 leader partiton 所在的节点，并初始化和节点的网络连接
+    2 从accumulator中获取 nodes上的数据
+     */
     void run(long now) {
         Cluster cluster = metadata.fetch();
         // get the list of partitions with data ready to send
+        // 获取那些已经可以发送的 RecordBatch 对应的 nodes
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
+        // 如果有 topic-partition 的 leader 是未知的,就强制 metadata 更新
         // if there are any partitions whose leaders are not known yet, force metadata update
         if (!result.unknownLeaderTopics.isEmpty()) {
             // The set of topics with unknown leader contains topics with leader election pending as well as
@@ -176,17 +183,20 @@ public class Sender implements Runnable {
             this.metadata.requestUpdate();
         }
 
+        // 如果与node 没有连接（如果可以连接,同时初始化该连接）,就证明该 node 暂时不能发送数据,暂时移除该 node
         // remove any nodes we aren't ready to send to
         Iterator<Node> iter = result.readyNodes.iterator();
         long notReadyTimeout = Long.MAX_VALUE;
         while (iter.hasNext()) {
             Node node = iter.next();
-            if (!this.client.ready(node, now)) {
-                iter.remove();
+            if (!this.client.ready(node, now)) {//如果没有连接，则初始化连接
+                iter.remove(); //去掉连接不上的node
                 notReadyTimeout = Math.min(notReadyTimeout, this.client.connectionDelay(node, now));
             }
         }
 
+        // 返回该 node 对应的所有可以发送的 RecordBatch 组成的 batches（key 是 node.id）
+        // ,并将 RecordBatch 从对应的 queue 中移除
         // create produce requests
         Map<Integer, List<RecordBatch>> batches = this.accumulator.drain(cluster,
                                                                          result.readyNodes,
@@ -200,6 +210,7 @@ public class Sender implements Runnable {
             }
         }
 
+        // 将由于元数据不可用而导致发送超时的 RecordBatch 移除
         List<RecordBatch> expiredBatches = this.accumulator.abortExpiredBatches(this.requestTimeout, now);
         // update sensors
         for (RecordBatch expiredBatch : expiredBatches)
@@ -222,6 +233,7 @@ public class Sender implements Runnable {
         // otherwise if some partition already has some data accumulated but not ready yet,
         // the select time will be the time difference between now and its linger expiry time;
         // otherwise the select time will be the time difference between now and the metadata expiry time;
+        // 这里才是真正执行网络请求
         this.client.poll(pollTimeout, now);
     }
 
@@ -343,7 +355,9 @@ public class Sender implements Runnable {
      * Create a produce request from the given record batches
      */
     private void sendProduceRequest(long now, int destination, short acks, int timeout, List<RecordBatch> batches) {
+         //构建发送请求的数据
         Map<TopicPartition, MemoryRecords> produceRecordsByPartition = new HashMap<>(batches.size());
+         //在回调函数中使用
         final Map<TopicPartition, RecordBatch> recordsByPartition = new HashMap<>(batches.size());
         for (RecordBatch batch : batches) {
             TopicPartition tp = batch.topicPartition;

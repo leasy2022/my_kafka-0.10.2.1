@@ -61,6 +61,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * This class manages the coordination process with the consumer coordinator.
  */
+/*
+消费者协调器类（要与 服务端的 群组协调器 区别开：这是个 broker节点）负责群组管理，封装了与 群组协调器之前的通信。
+作用1：提交、获取 partition的 偏移量（是消费偏移量还是 提交偏移量）
+2 向 群组协调器发送加入 群组的请求,获取分配的分区
+3 心跳线程：向 群组协调器 发送心跳
+ */
 public final class ConsumerCoordinator extends AbstractCoordinator {
 
     private static final Logger log = LoggerFactory.getLogger(ConsumerCoordinator.class);
@@ -80,7 +86,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     // of offset commit requests, which may be invoked from the heartbeat thread
     private final ConcurrentLinkedQueue<OffsetCommitCompletion> completedOffsetCommits;
 
-    private boolean isLeader = false;
+    private boolean isLeader = false; //这个 leader是什么意思？
     private Set<String> joinedSubscription;
     private MetadataSnapshot metadataSnapshot;
     private MetadataSnapshot assignmentSnapshot;
@@ -91,20 +97,20 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      */
     public ConsumerCoordinator(ConsumerNetworkClient client,
                                String groupId,
-                               int rebalanceTimeoutMs,
-                               int sessionTimeoutMs,
-                               int heartbeatIntervalMs,
+                               int rebalanceTimeoutMs,//max.poll.interval.ms
+                               int sessionTimeoutMs,//session.timeout.ms
+                               int heartbeatIntervalMs,//heartbeat.interval.ms
                                List<PartitionAssignor> assignors,
                                Metadata metadata,
                                SubscriptionState subscriptions,
                                Metrics metrics,
-                               String metricGrpPrefix,
+                               String metricGrpPrefix,//consumer
                                Time time,
                                long retryBackoffMs,
                                boolean autoCommitEnabled,
                                int autoCommitIntervalMs,
                                ConsumerInterceptors<?, ?> interceptors,
-                               boolean excludeInternalTopics) {
+                               boolean excludeInternalTopics) {//exclude.internal.topics
         super(client,
                 groupId,
                 rebalanceTimeoutMs,
@@ -214,9 +220,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         Assignment assignment = ConsumerProtocol.deserializeAssignment(assignmentBuffer);
 
         // set the flag to refresh last committed offsets
-        subscriptions.needRefreshCommits();
+        subscriptions.needRefreshCommits();// 1 设置标识
 
-        // update partition assignment
+        // update partition assignment 1 更新订阅的 topic partitions
         subscriptions.assignFromSubscribed(assignment.partitions());
 
         // check if the assignment contains some topics that were not in the original
@@ -242,9 +248,11 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 
         // update the metadata and enforce a refresh to make sure the fetcher can start
         // fetching data in the next iteration
+        //2 更新 metadata,确保在下一次循环中可以拉取
         this.metadata.setTopics(subscriptions.groupSubscription());
         client.ensureFreshMetadata();
 
+        //3 调用 assignor和ConsumerRebalanceListener的回调函数
         // give the assignor a chance to update internal state based on the received assignment
         assignor.onAssignment(assignment);
 
@@ -272,26 +280,41 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      *
      * @param now current time in milliseconds
      */
+    /*
+    轮询执行的动作：
+    1 如果没有同群组协调器连接，则建连
+    2 首次或满足条件重新加入群组
+    3 检查心跳信息
+    4 自动提交offset
+     */
     public void poll(long now) {
-        invokeCompletedOffsetCommitCallbacks();
+        invokeCompletedOffsetCommitCallbacks();// note: 用于测试
 
+        //前提：1 分配了topic  2 客户端连上了群组协调器
+        // note: Step1 通过 subscribe() 方法订阅 topic,并且 coordinator 未知,初始化 Consumer Coordinator
         if (subscriptions.partitionsAutoAssigned() && coordinatorUnknown()) {
+            //1 初始化 Consumer Coordinator： 获取 GroupCoordinator 地址,并且建立连接
             ensureCoordinatorReady();
             now = time.milliseconds();
         }
 
+        // note: Step2 判断是否需要重新加入 group,如果订阅的 partition 变化或则分配的 partition 变化时,需要 rejoin
         if (needRejoin()) {
             // due to a race condition between the initial metadata fetch and the initial rebalance,
             // we need to ensure that the metadata is fresh before joining initially. This ensures
             // that we have matched the pattern against the cluster's topics at least once before joining.
+            // note: rejoin group 之前先刷新一下 metadata（对于 AUTO_PATTERN 而言）
             if (subscriptions.hasPatternSubscription())
                 client.ensureFreshMetadata();
 
+            // note: 确保 group 是 active; 加入 group; 分配订阅的 partition
             ensureActiveGroup();
             now = time.milliseconds();
         }
 
+        // note: Step3 检查心跳线程运行是否正常,如果心跳线程失败,则抛出异常,反之更新 poll 调用的时间
         pollHeartbeat(now);
+        // note: Step4 自动 commit 时,当定时达到时,进行自动 commit
         maybeAutoCommitOffsetsAsync(now);
     }
 
@@ -387,6 +410,12 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         return groupAssignment;
     }
 
+    //进行rejoin前的准备工作
+    /*
+    1 如果开启了自动提交偏移量，提交各分区偏移量
+    2 调用 再均衡监听器
+    3 resetGroupSubscription  ，这有什么作用？
+     */
     @Override
     protected void onJoinPrepare(int generation, String memberId) {
         // commit offsets prior to rebalance if auto-commit enabled
@@ -411,13 +440,15 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 
     @Override
     public boolean needRejoin() {
-        if (!subscriptions.partitionsAutoAssigned())
+        if (!subscriptions.partitionsAutoAssigned()) //如果是 assign模式，则不用加入 消费组
             return false;
 
+        // 元数据有更新
         // we need to rejoin if we performed the assignment and metadata has changed
         if (assignmentSnapshot != null && !assignmentSnapshot.equals(metadataSnapshot))
             return true;
 
+        //分区有变化
         // we need to join if our subscription has changed since the last join
         if (joinedSubscription != null && !joinedSubscription.equals(subscriptions.subscription()))
             return true;
@@ -428,13 +459,16 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     /**
      * Refresh the committed offsets for provided partitions.
      */
+    //更新 分区状态 的已提交偏移量：向服务端的协调者节点发送请求，获取分区对应的已提交偏移量，并更新客户端数据
     public void refreshCommittedOffsetsIfNeeded() {
         if (subscriptions.refreshCommitsNeeded()) {
+            //发送OFFSET_FETCH请求给协调者，获取分区已经提交的偏移量
             Map<TopicPartition, OffsetAndMetadata> offsets = fetchCommittedOffsets(subscriptions.assignedPartitions());
             for (Map.Entry<TopicPartition, OffsetAndMetadata> entry : offsets.entrySet()) {
                 TopicPartition tp = entry.getKey();
                 // verify assignment is still active
                 if (subscriptions.isAssigned(tp))
+                    //更新分区状态的commited变量，协调节点保存的数据更新到客户端
                     this.subscriptions.committed(tp, entry.getValue());
             }
             this.subscriptions.commitsRefreshed();

@@ -90,7 +90,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
     private final Metadata metadata;
     private final FetchManagerMetrics sensors;
     private final SubscriptionState subscriptions;
-    private final ConcurrentLinkedQueue<CompletedFetch> completedFetches;
+    private final ConcurrentLinkedQueue<CompletedFetch> completedFetches; //
     private final Deserializer<K> keyDeserializer;
     private final Deserializer<V> valueDeserializer;
 
@@ -199,7 +199,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
                             for (Map.Entry<TopicPartition, FetchResponse.PartitionData> entry : response.responseData().entrySet()) {
                                 TopicPartition partition = entry.getKey();
                                 long fetchOffset = request.fetchData().get(partition).offset;
-                                FetchResponse.PartitionData fetchData = entry.getValue();
+                                FetchResponse.PartitionData fetchData = entry.getValue();//拉取的数据
                                 completedFetches.add(new CompletedFetch(partition, fetchOffset, fetchData, metricAggregator,
                                         request.version()));
                             }
@@ -234,19 +234,21 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
      * @param partitions the partitions to update positions for
      * @throws NoOffsetForPartitionException If no offset is stored for a given partition and no reset policy is available
      */
+    //更新 分区状态 的拉取偏移量：
     public void updateFetchPositions(Set<TopicPartition> partitions) {
         // reset the fetch position to the committed position
         for (TopicPartition tp : partitions) {
             if (!subscriptions.isAssigned(tp) || subscriptions.hasValidPosition(tp))
                 continue;
 
-            if (subscriptions.isOffsetResetNeeded(tp)) {
+            //重置拉取偏移量到已经提交过的位置
+            if (subscriptions.isOffsetResetNeeded(tp)) {//需要重置
                 resetOffset(tp);
-            } else if (subscriptions.committed(tp) == null) {
+            } else if (subscriptions.committed(tp) == null) {//已提交的偏移量为空
                 // there's no committed position, so we need to reset with the default strategy
-                subscriptions.needOffsetReset(tp);
+                subscriptions.needOffsetReset(tp);//需要重置
                 resetOffset(tp);
-            } else {
+            } else {//分区状态中，已提交的偏移量不为空，直接使用它作为拉取偏移量
                 long committed = subscriptions.committed(tp).offset();
                 log.debug("Resetting offset for partition {} to the committed offset {}", tp, committed);
                 subscriptions.seek(tp, committed);
@@ -472,7 +474,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
 
         Map<TopicPartition, List<ConsumerRecord<K, V>>> drained = new HashMap<>();
         int recordsRemaining = maxPollRecords;
-        while (recordsRemaining > 0) {
+        while (recordsRemaining > 0) {//没有达到条数上限
             if (nextInLineRecords == null || nextInLineRecords.isDrained()) {
                 CompletedFetch completedFetch = completedFetches.poll();
                 if (completedFetch == null) break;
