@@ -40,11 +40,11 @@ public final class RecordBatch {
     private static final Logger log = LoggerFactory.getLogger(RecordBatch.class);
 
     final long createdMs;
-    final TopicPartition topicPartition;
+    final TopicPartition topicPartition; //属于哪一个tp
     final ProduceRequestResult produceFuture;
 
-    private final List<Thunk> thunks = new ArrayList<>();
-    private final MemoryRecordsBuilder recordsBuilder;
+    private final List<Thunk> thunks = new ArrayList<>(); //每条插入的数据对应一个Thunk对象，（封装了Callback）
+    private final MemoryRecordsBuilder recordsBuilder;// 用于存储的数据结构
 
     volatile int attempts;
     int recordCount; // 统计信息：记录放入的条数
@@ -62,7 +62,7 @@ public final class RecordBatch {
         this.recordsBuilder = recordsBuilder;
         this.topicPartition = tp;
         this.lastAppendTime = createdMs;
-        this.produceFuture = new ProduceRequestResult(topicPartition);
+        this.produceFuture = new ProduceRequestResult(topicPartition); //跟踪这个分区的发送状态
         this.completed = new AtomicBoolean();
     }
 
@@ -81,7 +81,7 @@ public final class RecordBatch {
         if (!recordsBuilder.hasRoomFor(key, value)) {
                 return null;
         } else {
-            long checksum = this.recordsBuilder.append(timestamp, key, value);
+            long checksum = this.recordsBuilder.append(timestamp, key, value);//插入时间
             this.maxRecordSize = Math.max(this.maxRecordSize, Record.recordSize(key, value));
             this.lastAppendTime = now;
             //封装一些统计信息和Future

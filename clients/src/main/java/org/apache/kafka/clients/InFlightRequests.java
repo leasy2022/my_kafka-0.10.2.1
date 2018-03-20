@@ -42,7 +42,7 @@ final class InFlightRequests {
             reqs = new ArrayDeque<>();
             this.requests.put(destination, reqs);
         }
-        reqs.addFirst(request);
+        reqs.addFirst(request);//为什么放入第一个？
     }
 
     /**

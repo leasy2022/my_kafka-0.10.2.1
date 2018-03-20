@@ -135,8 +135,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private static final AtomicInteger PRODUCER_CLIENT_ID_SEQUENCE = new AtomicInteger(1);
     private static final String JMX_PREFIX = "kafka.producer";
 
-    private String clientId;
-    private final Partitioner partitioner;
+    private String clientId; //用户配置的client id
+    private final Partitioner partitioner;// 可以通过配置定义： partitioner.class
     private final int maxRequestSize;
     private final long totalMemorySize;
     private final Metadata metadata;
@@ -152,7 +152,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final ProducerConfig producerConfig;
     private final long maxBlockTimeMs;
     private final int requestTimeoutMs;
-    private final ProducerInterceptors<K, V> interceptors;
+    private final ProducerInterceptors<K, V> interceptors; //拦截器列表：对每条发送的数据进行处理，还返回一个同类型的数据
 
     /**
      * A producer is instantiated by providing a set of key-value pairs as configuration. Valid configuration strings
@@ -542,7 +542,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         Integer partitionsCount = cluster.partitionCountForTopic(topic);
         // Return cached metadata if we have it, and if the record's partition is either undefined
         // or within the known partition range
-        // 当前 metadata 中如果已经有这个 topic 的 meta 的话,就直接返回
+        // 1 当前 metadata 中如果已经有这个 topic 的 meta 的话,就直接返回
         if (partitionsCount != null && (partition == null || partition < partitionsCount))
             return new ClusterAndWaitTime(cluster, 0);
 
@@ -558,7 +558,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             int version = metadata.requestUpdate(); //并没有真正执行更新， 而是 标识 需要更新
             sender.wakeup();
             try {
-                metadata.awaitUpdate(version, remainingWaitMs);// 等待 metadata 的更新
+                metadata.awaitUpdate(version, remainingWaitMs);// 阻塞，等待 metadata 的更新
             } catch (TimeoutException ex) {
                 // Rethrow with original maxWaitMs to prevent logging exception with remainingWaitMs
                 throw new TimeoutException("Failed to update metadata after " + maxWaitMs + " ms.");
@@ -828,6 +828,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      * A callback called when producer request is complete. It in turn calls user-supplied callback (if given) and
      * notifies producer interceptors about the request completion.
      */
+    //当成功发送数据后，会调用 回调函数（Callback的实现类). InterceptorCallback
     private static class InterceptorCallback<K, V> implements Callback {
         private final Callback userCallback;
         private final ProducerInterceptors<K, V> interceptors;
@@ -842,6 +843,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
         public void onCompletion(RecordMetadata metadata, Exception exception) {
             if (this.interceptors != null) {
+                //调用拦截器的： onAcknowledgement
                 if (metadata == null) {
                     this.interceptors.onAcknowledgement(new RecordMetadata(tp, -1, -1, Record.NO_TIMESTAMP, -1, -1, -1),
                                                         exception);
@@ -849,6 +851,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.interceptors.onAcknowledgement(metadata, exception);
                 }
             }
+            // 调用 回调方法
             if (this.userCallback != null)
                 this.userCallback.onCompletion(metadata, exception);
         }

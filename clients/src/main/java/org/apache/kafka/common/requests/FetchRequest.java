@@ -26,6 +26,10 @@ import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.utils.Utils;
 
+
+/*
+构建 请求获取数据 的请求：
+ */
 public class FetchRequest extends AbstractRequest {
     public static final int CONSUMER_REPLICA_ID = -1;
     private static final String REPLICA_ID_KEY_NAME = "replica_id";
@@ -54,7 +58,7 @@ public class FetchRequest extends AbstractRequest {
     private final LinkedHashMap<TopicPartition, PartitionData> fetchData;
 
     public static final class PartitionData {
-        public final long offset;
+        public final long offset;// partition的position
         public final int maxBytes;
 
         public PartitionData(long offset, int maxBytes) {

@@ -381,6 +381,7 @@ public class MemoryRecordsBuilder {
      * the checking should be based on the capacity of the initialized buffer rather than the write limit in order
      * to accept this single record.
      */
+    //每次写入数据的时候，都先检查容量
     public boolean hasRoomFor(byte[] key, byte[] value) {
         return !isFull() && (numRecords == 0 ?
                 this.initialCapacity >= Records.LOG_OVERHEAD + Record.recordSize(magic, key, value) :
@@ -406,7 +407,7 @@ public class MemoryRecordsBuilder {
             switch (type) {
                 case NONE:
                     return buffer;
-                case GZIP:
+                case GZIP://GZIP 压缩
                     return new DataOutputStream(new GZIPOutputStream(buffer, bufferSize));
                 case SNAPPY:
                     try {

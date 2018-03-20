@@ -35,6 +35,7 @@ final class ClusterConnectionStates {
      * @param now the current time in MS
      * @return true if we can initiate a new connection
      */
+    //如果之前没有连接过，或者 上次连接失败后过了一段时间， 可以再一次去连接
     public boolean canConnect(String id, long now) {
         NodeConnectionState state = nodeState.get(id);
         if (state == null)

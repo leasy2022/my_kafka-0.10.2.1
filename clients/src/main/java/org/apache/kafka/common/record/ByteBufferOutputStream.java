@@ -35,6 +35,7 @@ public class ByteBufferOutputStream extends DataOutputStream {
         return ((UnderlyingOutputStream) out).buffer;
     }
 
+    //实现了 一个新的 输出流类：（类似ByteArrayOutputStream), 但是，底层的缓存是基于 ByteBuffer 的
     public static class UnderlyingOutputStream extends OutputStream {
         private ByteBuffer buffer;
 

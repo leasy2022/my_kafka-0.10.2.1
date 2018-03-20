@@ -32,6 +32,13 @@ import java.util.List;
  * A container that holds the list {@link org.apache.kafka.clients.producer.ProducerInterceptor}
  * and wraps calls to the chain of custom interceptors.
  */
+/*
+封装 用户在配置中定义的 Interceptor
+
+1 onSend: 发送前调用
+2 onAcknowledgement:  当发送收到响应后（成功或失败）
+
+ */
 public class ProducerInterceptors<K, V> implements Closeable {
     private static final Logger log = LoggerFactory.getLogger(ProducerInterceptors.class);
     private final List<ProducerInterceptor<K, V>> interceptors;

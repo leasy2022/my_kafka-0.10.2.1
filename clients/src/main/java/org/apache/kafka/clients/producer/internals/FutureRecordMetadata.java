@@ -22,6 +22,11 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 /**
  * The future result of a record send
  */
+/*
+Future模式：
+FutureRecordMetadata实现了Future接口，在里面封装了 ProduceRequestResult
+
+ */
 public final class FutureRecordMetadata implements Future<RecordMetadata> {
 
     private final ProduceRequestResult result;
@@ -34,7 +39,7 @@ public final class FutureRecordMetadata implements Future<RecordMetadata> {
     public FutureRecordMetadata(ProduceRequestResult result, long relativeOffset, long createTimestamp,
                                 long checksum, int serializedKeySize, int serializedValueSize) {
         this.result = result;
-        this.relativeOffset = relativeOffset;
+        this.relativeOffset = relativeOffset; //这一批，插入缓冲区的第几条记录
         this.createTimestamp = createTimestamp;
         this.checksum = checksum;
         this.serializedKeySize = serializedKeySize;

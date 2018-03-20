@@ -51,10 +51,10 @@ public class ConsumerNetworkClient implements Closeable {
     // the mutable state of this class is protected by the object's monitor (excluding the wakeup
     // flag and the request completion queue below).
     private final KafkaClient client;
-    private final Map<Node, List<ClientRequest>> unsent = new HashMap<>();
+    private final Map<Node, List<ClientRequest>> unsent = new HashMap<>();//需要发送的请求
     private final Metadata metadata;
     private final Time time;
-    private final long retryBackoffMs;
+    private final long retryBackoffMs;//轮询的阻塞时间
     private final long unsentExpiryMs;
     private int wakeupDisabledCount = 0;
 
@@ -90,8 +90,15 @@ public class ConsumerNetworkClient implements Closeable {
      * @param requestBuilder A builder for the request payload
      * @return A future which indicates the result of the send.
      */
+    //抽象出 发送各种各样的请求： 1 请求消费数据
+    /*
+    1 生成一个统一的请求对象
+    2 把请求放入一个数据结构，异步发送，返回RequestFuture
+
+     */
     public RequestFuture<ClientResponse> send(Node node, AbstractRequest.Builder<?> requestBuilder) {
         long now = time.milliseconds();
+        //成功响应后，调用回调函数
         RequestFutureCompletionHandler completionHandler = new RequestFutureCompletionHandler();
         ClientRequest clientRequest = client.newClientRequest(node.idString(), requestBuilder, now, true,
                 completionHandler);
@@ -131,6 +138,7 @@ public class ConsumerNetworkClient implements Closeable {
      *
      * @return true if update succeeded, false otherwise.
      */
+    //阻塞等待 metadata 的更新
     public boolean awaitMetadataUpdate(long timeout) {
         long startMs = time.milliseconds();
         int version = this.metadata.requestUpdate();
@@ -167,6 +175,7 @@ public class ConsumerNetworkClient implements Closeable {
      * @throws WakeupException if {@link #wakeup()} is called from another thread
      * @throws InterruptException if the calling thread is interrupted
      */
+    //阻塞 直至 返回 响应
     public void poll(RequestFuture<?> future) {
         while (!future.isDone())
             poll(MAX_POLL_TIMEOUT_MS, time.milliseconds(), future);
@@ -209,6 +218,11 @@ public class ConsumerNetworkClient implements Closeable {
      * @param timeout timeout in milliseconds
      * @param now current time in milliseconds
      */
+    /*
+    轮询：
+    1 处理队列中的响应
+    2 发送队列只的请求
+     */
     public void poll(long timeout, long now, PollCondition pollCondition) {
         // there may be handlers which need to be invoked if we woke up the previous call to poll
         firePendingCompletedRequests();
@@ -220,20 +234,21 @@ public class ConsumerNetworkClient implements Closeable {
             // check whether the poll is still needed by the caller. Note that if the expected completion
             // condition becomes satisfied after the call to shouldBlock() (because of a fired completion
             // handler), the client will be woken up.
+            //没有回调函数或者应该一直阻塞，则说明是同步的
             if (pollCondition == null || pollCondition.shouldBlock()) {
                 // if there are no requests in flight, do not block longer than the retry backoff
                 if (client.inFlightRequestCount() == 0)
                     timeout = Math.min(timeout, retryBackoffMs);
                 client.poll(Math.min(MAX_POLL_TIMEOUT_MS, timeout), now);
                 now = time.milliseconds();
-            } else {
+            } else {//异步的
                 client.poll(0, now);
             }
 
             // handle any disconnects by failing the active requests. note that disconnects must
             // be checked immediately following poll since any subsequent call to client.ready()
             // will reset the disconnect status
-            checkDisconnects(now);
+            checkDisconnects(now); //检查未发送数据的节点连接是不是正常
 
             // trigger wakeups after checking for disconnects so that the callbacks will be ready
             // to be fired on the next call to poll()
@@ -325,7 +340,7 @@ public class ConsumerNetworkClient implements Closeable {
         }
 
         // wakeup the client in case it is blocking in poll for this future's completion
-        if (completedRequestsFired)
+        if (completedRequestsFired)//为什么要 唤醒？
             client.wakeup();
     }
 
@@ -468,9 +483,11 @@ public class ConsumerNetworkClient implements Closeable {
             client.ready(node, time.milliseconds());
         }
     }
-
+   /*
+   1 向群组协调器节点发送 请求 offset的请求
+    */
     public class RequestFutureCompletionHandler implements RequestCompletionHandler {
-        private final RequestFuture<ClientResponse> future;
+        private final RequestFuture<ClientResponse> future;//
         private ClientResponse response;
         private RuntimeException e;
 
@@ -491,7 +508,7 @@ public class ConsumerNetworkClient implements Closeable {
             } else if (response.versionMismatch() != null) {
                 future.raise(response.versionMismatch());
             } else {
-                future.complete(response);
+                future.complete(response);//处理 返回的响应
             }
         }
 
@@ -500,6 +517,7 @@ public class ConsumerNetworkClient implements Closeable {
             pendingCompletion.add(this);
         }
 
+        //有响应后，调用方法。为response赋值，并把自身放入队列中，等待统一处理。
         @Override
         public void onComplete(ClientResponse response) {
             this.response = response;

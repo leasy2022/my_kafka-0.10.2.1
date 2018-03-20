@@ -518,7 +518,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     private final Deserializer<K> keyDeserializer;
     private final Deserializer<V> valueDeserializer;
     private final Fetcher<K, V> fetcher;
-    private final ConsumerInterceptors<K, V> interceptors; //拦截器作用和怎么配置?
+    private final ConsumerInterceptors<K, V> interceptors; // 当从服务端获取一批数据，对这批数据调用拦截器方法，然后再把数据返回客户端
 
     private final Time time;
     private final ConsumerNetworkClient client;
@@ -1007,8 +1007,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             long start = time.milliseconds();
             long remaining = timeout;
             do {
+                // 返回的是以 TopicPartition 为单位的数据，后面继续封装
                 Map<TopicPartition, List<ConsumerRecord<K, V>>> records = pollOnce(remaining);
-                if (!records.isEmpty()) {
+                if (!records.isEmpty()) { //
                     // before returning the fetched records, we can send off the next round of fetches
                     // and avoid block waiting for their responses to enable pipelining while the user
                     // is handling the fetched records.
@@ -1060,7 +1061,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // if data is available already, return it immediately
         // note: 3. 获取 fetcher 已经拉取到的数据： 先从缓存中取，如果有数据，返回取到的数据；否则，继续执行
         Map<TopicPartition, List<ConsumerRecord<K, V>>> records = fetcher.fetchedRecords();
-        if (!records.isEmpty())
+        if (!records.isEmpty())//如果不为空，即 有数据，则返回
             return records;
         // note: 说明上次 fetch 到是的数据已经全部拉取了,需要再次发送 fetch 请求,从 broker 拉取数据
 
@@ -1613,19 +1614,25 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @throws NoOffsetForPartitionException If no offset is stored for a given partition and no offset reset policy is
      *             defined
      */
+    /*
+     有的分区没有标识position,那从哪里开始读取呢？需要给position赋值。
+     1 如果分区有 重置策略，则会向 leader发送请求偏移量（最早或最新）
+     2
+     */
     private void updateFetchPositions(Set<TopicPartition> partitions) {
         // lookup any positions for partitions which are awaiting reset (which may be the
         // case if the user called seekToBeginning or seekToEnd. We do this check first to
         // avoid an unnecessary lookup of committed offsets (which typically occurs when
         // the user is manually assigning partitions and managing their own offsets).
-        fetcher.resetOffsetsIfNeeded(partitions);
+        fetcher.resetOffsetsIfNeeded(partitions);//如果满足条件，会向 leader发送请求偏移量（最早或最新）
 
+        // 如果仍然有分区没有设置消费偏移量
         if (!subscriptions.hasAllFetchPositions(partitions)) {
             // if we still don't have offsets for the given partitions, then we should either
             // seek to the last committed position or reset using the auto reset policy
 
             // first refresh commits for all assigned partitions
-            coordinator.refreshCommittedOffsetsIfNeeded();
+            coordinator.refreshCommittedOffsetsIfNeeded();// 刷新 topic下所有partiton的偏移量
 
             // then do any offset lookups in case some positions are not known
             fetcher.updateFetchPositions(partitions);
@@ -1648,6 +1655,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @throws ConcurrentModificationException if another thread already has the lock
      */
     //可以看出，consumer是线程不安全的。
+    /*
+    acquire()和release()： 不是为了多线程使用，保证线程安全。而是进行检查，不能用多线程。
+     */
     private void acquire() {
         ensureNotClosed();
         long threadId = Thread.currentThread().getId();

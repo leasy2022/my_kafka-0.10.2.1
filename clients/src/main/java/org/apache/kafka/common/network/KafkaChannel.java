@@ -140,6 +140,7 @@ public class KafkaChannel {
         this.transportLayer.addInterestOps(SelectionKey.OP_WRITE);
     }
 
+    //读数据
     public NetworkReceive read() throws IOException {
         NetworkReceive result = null;
 

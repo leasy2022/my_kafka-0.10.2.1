@@ -160,23 +160,24 @@ public class Selector implements Selectable {
      * @throws IllegalStateException if there is already a connection for that id
      * @throws IOException if DNS resolution fails on the hostname or if the broker is down
      */
+    // 这里是 客户端 的连接实现
     @Override
     public void connect(String id, InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
         if (this.channels.containsKey(id))
             throw new IllegalStateException("There is already a connection for id " + id);
 
-        SocketChannel socketChannel = SocketChannel.open();
+        SocketChannel socketChannel = SocketChannel.open();// 1 open一个SocketChannel
         socketChannel.configureBlocking(false);
-        Socket socket = socketChannel.socket();
-        socket.setKeepAlive(true);
+        Socket socket = socketChannel.socket();//2 获得socket
+        socket.setKeepAlive(true);//3 设置socket的多个参数：  长链接
         if (sendBufferSize != Selectable.USE_DEFAULT_BUFFER_SIZE)
             socket.setSendBufferSize(sendBufferSize);
         if (receiveBufferSize != Selectable.USE_DEFAULT_BUFFER_SIZE)
             socket.setReceiveBufferSize(receiveBufferSize);
-        socket.setTcpNoDelay(true);
+        socket.setTcpNoDelay(true);//
         boolean connected;
         try {
-            connected = socketChannel.connect(address);
+            connected = socketChannel.connect(address);//4 进行连接
         } catch (UnresolvedAddressException e) {
             socketChannel.close();
             throw new IOException("Can't resolve address: " + address, e);
@@ -184,8 +185,10 @@ public class Selector implements Selectable {
             socketChannel.close();
             throw e;
         }
-        SelectionKey key = socketChannel.register(nioSelector, SelectionKey.OP_CONNECT);
-        KafkaChannel channel = channelBuilder.buildChannel(id, key, maxReceiveSize);
+        SelectionKey key = socketChannel.register(nioSelector, SelectionKey.OP_CONNECT);//5 将客户端的channel注册到 selector中
+
+//      又把 channel 进行了封装，并最为 附件传递过去
+         KafkaChannel channel = channelBuilder.buildChannel(id, key, maxReceiveSize);
         key.attach(channel);
         this.channels.put(id, channel);
 
@@ -295,7 +298,7 @@ public class Selector implements Selectable {
 
         /* check ready keys */
         long startSelect = time.nanoseconds();
-        int readyKeys = select(timeout);
+        int readyKeys = select(timeout); //这是关键函数，在进行 select
         long endSelect = time.nanoseconds();
         this.sensors.selectTime.record(endSelect - startSelect, time.milliseconds());
 
@@ -314,6 +317,7 @@ public class Selector implements Selectable {
         maybeCloseOldestConnection(endSelect);
     }
 
+    //selector中得到的 SelectionKey 或者 初次建立连接的
     private void pollSelectionKeys(Iterable<SelectionKey> selectionKeys,
                                    boolean isImmediatelyConnected,
                                    long currentTimeNanos) {
@@ -321,7 +325,7 @@ public class Selector implements Selectable {
         while (iterator.hasNext()) {
             SelectionKey key = iterator.next();
             iterator.remove();
-            KafkaChannel channel = channel(key);
+            KafkaChannel channel = channel(key);//获得 附加的对象
 
             // register all per-connection metrics at once
             sensors.maybeRegisterConnectionMetrics(channel.id());

@@ -169,10 +169,10 @@ public class Sender implements Runnable {
     void run(long now) {
         Cluster cluster = metadata.fetch();
         // get the list of partitions with data ready to send
-        // 获取那些已经可以发送的 RecordBatch 对应的 nodes
+        //1 获取那些已经可以发送的 RecordBatch 对应的 nodes
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
-        // 如果有 topic-partition 的 leader 是未知的,就强制 metadata 更新
+        //2  如果有 topic-partition 的 leader 是未知的,就强制 metadata 更新
         // if there are any partitions whose leaders are not known yet, force metadata update
         if (!result.unknownLeaderTopics.isEmpty()) {
             // The set of topics with unknown leader contains topics with leader election pending as well as
@@ -183,7 +183,7 @@ public class Sender implements Runnable {
             this.metadata.requestUpdate();
         }
 
-        // 如果与node 没有连接（如果可以连接,同时初始化该连接）,就证明该 node 暂时不能发送数据,暂时移除该 node
+        // 3 如果与node 没有连接（如果可以连接,同时初始化该连接）,就证明该 node 暂时不能发送数据,暂时移除该 node
         // remove any nodes we aren't ready to send to
         Iterator<Node> iter = result.readyNodes.iterator();
         long notReadyTimeout = Long.MAX_VALUE;
@@ -195,6 +195,7 @@ public class Sender implements Runnable {
             }
         }
 
+        //4 准备发送的数据：
         // 返回该 node 对应的所有可以发送的 RecordBatch 组成的 batches（key 是 node.id）
         // ,并将 RecordBatch 从对应的 queue 中移除
         // create produce requests
@@ -361,7 +362,7 @@ public class Sender implements Runnable {
         final Map<TopicPartition, RecordBatch> recordsByPartition = new HashMap<>(batches.size());
         for (RecordBatch batch : batches) {
             TopicPartition tp = batch.topicPartition;
-            produceRecordsByPartition.put(tp, batch.records());
+            produceRecordsByPartition.put(tp, batch.records()); //每个partition需要发送的数据
             recordsByPartition.put(tp, batch);
         }
 
@@ -369,6 +370,7 @@ public class Sender implements Runnable {
                 new ProduceRequest.Builder(acks, timeout, produceRecordsByPartition);
         RequestCompletionHandler callback = new RequestCompletionHandler() {
             public void onComplete(ClientResponse response) {
+                //回调函数：处理响应
                 handleProduceResponse(response, recordsByPartition, time.milliseconds());
             }
         };

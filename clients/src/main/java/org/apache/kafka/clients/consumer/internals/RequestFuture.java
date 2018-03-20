@@ -37,10 +37,16 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @param <T> Return type of the result (Can be Void if there is no response)
  */
+/*
+提供统一的接口，来处理服务端的响应（成功或失败）
+a 不同的响应处理模式，是通过监听器来实现的
+ */
 public class RequestFuture<T> implements ConsumerNetworkClient.PollCondition {
 
     private static final Object INCOMPLETE_SENTINEL = new Object();
+    //存放 服务端返回的 响应结果
     private final AtomicReference<Object> result = new AtomicReference<>(INCOMPLETE_SENTINEL);
+    //保存 请求的 监听器
     private final ConcurrentLinkedQueue<RequestFutureListener<T>> listeners = new ConcurrentLinkedQueue<>();
 
     /**
@@ -107,11 +113,14 @@ public class RequestFuture<T> implements ConsumerNetworkClient.PollCondition {
      * @throws IllegalStateException if the future has already been completed
      * @throws IllegalArgumentException if the argument is an instance of {@link RuntimeException}
      */
+    /*
+    请求成功，会调用 注册的 监听器
+     */
     public void complete(T value) {
         if (value instanceof RuntimeException)
             throw new IllegalArgumentException("The argument to complete can not be an instance of RuntimeException");
 
-        if (!result.compareAndSet(INCOMPLETE_SENTINEL, value))
+        if (!result.compareAndSet(INCOMPLETE_SENTINEL, value))//放置 异步请求 返回的结果
             throw new IllegalStateException("Invalid attempt to complete a request future which is already complete");
         fireSuccess();
     }
@@ -139,6 +148,7 @@ public class RequestFuture<T> implements ConsumerNetworkClient.PollCondition {
     public void raise(Errors error) {
         raise(error.exception());
     }
+
 
     private void fireSuccess() {
         T value = value();
@@ -177,6 +187,11 @@ public class RequestFuture<T> implements ConsumerNetworkClient.PollCondition {
      * @param adapter The adapter which does the conversion
      * @param <S> The type of the future adapted to
      * @return The new future
+     */
+    //compose和addListener两个方法的区别：
+    /*
+    compose的方法，客户端收到响应立刻调用
+    addListener的监听器，是
      */
     public <S> RequestFuture<S> compose(final RequestFutureAdapter<T, S> adapter) {
         final RequestFuture<S> adapted = new RequestFuture<>();

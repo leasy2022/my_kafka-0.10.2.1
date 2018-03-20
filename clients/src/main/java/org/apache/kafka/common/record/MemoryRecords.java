@@ -284,10 +284,10 @@ public class MemoryRecords extends AbstractRecords {
         }
     }
 
-    public static MemoryRecordsBuilder builder(ByteBuffer buffer,
+    public static MemoryRecordsBuilder builder(ByteBuffer buffer, //底层进行存储的内存
                                                CompressionType compressionType,
                                                TimestampType timestampType,
-                                               int writeLimit) {
+                                               int writeLimit) {//batchSize
         return new MemoryRecordsBuilder(buffer, Record.CURRENT_MAGIC_VALUE, compressionType, timestampType, 0L, System.currentTimeMillis(), writeLimit);
     }
 

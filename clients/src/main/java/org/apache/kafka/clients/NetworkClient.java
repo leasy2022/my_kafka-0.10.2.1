@@ -69,7 +69,7 @@ public class NetworkClient implements KafkaClient {
     private final Random randOffset;
 
     /* the state of each node's connection */
-    private final ClusterConnectionStates connectionStates;
+    private final ClusterConnectionStates connectionStates; //跟踪 节点连接的状态
 
     /* the set of requests currently being sent or awaiting a response */
     private final InFlightRequests inFlightRequests;

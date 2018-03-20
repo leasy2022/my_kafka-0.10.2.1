@@ -53,6 +53,9 @@ import java.util.regex.Pattern;
 跟踪用户消费的 topics，partitions 状态
 1 消费者消费了哪些topic的哪些分区
 2 这些partiton的状态是什么样的
+
+每个consumer会有一个 ConsumerCoordinator对象，而每个ConsumerCoordinator对象会有一个 订阅状态 成员：
+含义：自己(consumer)消费哪些topic，被分配 哪些 partition
  */
 public class SubscriptionState {
     private static final String SUBSCRIPTION_EXCEPTION_MESSAGE =
@@ -63,7 +66,7 @@ public class SubscriptionState {
     }
 
     /* the type of subscription */
-    private SubscriptionType subscriptionType;
+    private SubscriptionType subscriptionType; //只能在第一次使用的时候赋值一次
 
     /* the pattern user has requested */
     private Pattern subscribedPattern; //匹配模式：使用正则匹配的 topics
@@ -78,10 +81,10 @@ public class SubscriptionState {
     //为这个消费者分配哪些分区（顺序有影响）
     //1 如果是分配模式，一开始就知道自己订阅的分区
     //2 如果是订阅模式，需要 消费者协调器来分配
-    private final PartitionStates<TopicPartitionState> assignment;
+    private final PartitionStates<TopicPartitionState> assignment; //
 
     /* do we need to request the latest committed offsets from the coordinator? */
-    private boolean needsFetchCommittedOffsets;
+    private boolean needsFetchCommittedOffsets;//是否需要从 coordinator 获取最新的偏移量
 
     /* Default offset reset strategy */
     private final OffsetResetStrategy defaultResetStrategy;
@@ -90,7 +93,7 @@ public class SubscriptionState {
     private ConsumerRebalanceListener listener; //再均衡监听器
 
     /* Listeners provide a hook for internal state cleanup (e.g. metrics) on assignment changes */
-    private List<Listener> listeners = new ArrayList<>();
+    private List<Listener> listeners = new ArrayList<>();// 监听器，当
 
     public SubscriptionState(OffsetResetStrategy defaultResetStrategy) {
         this.defaultResetStrategy = defaultResetStrategy;
@@ -187,13 +190,16 @@ public class SubscriptionState {
      * note this is different from {@link #assignFromUser(Set)} which directly set the assignment from user inputs
      */
     /*
-    将 分区 更换为 从群组协调器返回的最新的分区
+    群组协调器告诉这个consumer: 你需要消费 这几个分区
+
      */
     public void assignFromSubscribed(Collection<TopicPartition> assignments) {
         if (!this.partitionsAutoAssigned())//是订阅模式，不是分配模式
             throw new IllegalArgumentException("Attempt to dynamically assign partitions while manual assignment in use");
 
+        //
         Map<TopicPartition, TopicPartitionState> assignedPartitionStates = partitionToStateMap(assignments);
+        //调用 监听器
         fireOnAssignment(assignedPartitionStates.keySet());
 
         //对 分区所属的 topic进行检查
@@ -231,7 +237,7 @@ public class SubscriptionState {
         return this.subscriptionType == SubscriptionType.NONE;
     }
 
-    public void unsubscribe() {
+    public void unsubscribe() {//取消订阅
         this.subscription = Collections.emptySet();
         this.assignment.clear();
         this.subscribedPattern = null;
@@ -278,7 +284,7 @@ public class SubscriptionState {
             throw new IllegalStateException("No current assignment for partition " + tp);
         return state;
     }
-   //更新指定分区的 消费偏移量
+   //从 群组协调器获取OffsetAndMetadata，并更新指定分区的 消费偏移量
     public void committed(TopicPartition tp, OffsetAndMetadata offset) {
         assignedState(tp).committed(offset);
     }

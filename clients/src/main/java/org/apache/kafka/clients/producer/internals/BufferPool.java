@@ -43,10 +43,10 @@ import org.apache.kafka.common.utils.Time;
  */
 public final class BufferPool {
 
-    private final long totalMemory;
-    private final int poolableSize;
+    private final long totalMemory; // 设置的发送端缓存数据的最大内存量
+    private final int poolableSize; //batch.size
     private final ReentrantLock lock;
-    private final Deque<ByteBuffer> free;
+    private final Deque<ByteBuffer> free; //保存释放的ByteBuffer，避免重复申请
     private final Deque<Condition> waiters;
     private long availableMemory;
     private final Metrics metrics;
@@ -90,7 +90,7 @@ public final class BufferPool {
      *         forever)
      */
     public ByteBuffer allocate(int size, long maxTimeToBlockMs) throws InterruptedException {
-        if (size > this.totalMemory)
+        if (size > this.totalMemory)//超过了
             throw new IllegalArgumentException("Attempt to allocate " + size
                                                + " bytes, but there is a hard limit of "
                                                + this.totalMemory
@@ -111,7 +111,7 @@ public final class BufferPool {
                 freeUp(size);
                 this.availableMemory -= size;
                 lock.unlock();
-                return ByteBuffer.allocate(size);
+                return ByteBuffer.allocate(size); // 数据要通过网络发送到server端，为什么不使用堆外内存？？是不方便管理么
             } else {
                 // we are out of memory and will have to block
                 int accumulated = 0;

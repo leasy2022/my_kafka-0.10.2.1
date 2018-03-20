@@ -69,7 +69,7 @@ public final class RecordAccumulator {
     private volatile boolean closed; //标识当前 RecordAccumulator 的状态
     private final AtomicInteger flushesInProgress;
     private final AtomicInteger appendsInProgress;// 记录当前数据条数
-    private final int batchSize;
+    private final int batchSize; // 构造MemoryRecordsBuilder 时候 传入
     private final CompressionType compression;
     private final long lingerMs;
     private final long retryBackoffMs;
@@ -336,6 +336,8 @@ public final class RecordAccumulator {
      */
      /*
      主要是： 获取符合发送数据的 leader partiton 所在的节点
+     1 不一定满了才会被发送，有很多条件，只要满足一个 boolean sendable = full || expired || exhausted || closed || flushInProgress();
+     2 以 Node为目标放数据
       */
     public ReadyCheckResult ready(Cluster cluster, long nowMs) {
         Set<Node> readyNodes = new HashSet<>();
@@ -587,8 +589,8 @@ public final class RecordAccumulator {
      */
     public final static class RecordAppendResult {
         public final FutureRecordMetadata future;
-        public final boolean batchIsFull;
-        public final boolean newBatchCreated;
+        public final boolean batchIsFull;//
+        public final boolean newBatchCreated; //是否 生成了新的一批
 
         public RecordAppendResult(FutureRecordMetadata future, boolean batchIsFull, boolean newBatchCreated) {
             this.future = future;

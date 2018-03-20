@@ -333,6 +333,14 @@ public abstract class AbstractCoordinator implements Closeable {
         }
     }
 
+    /*
+    加入组请求流程
+    1 消费者在加入消费组之前，需要做一些准备工作： 提交偏移量，执行监听器的回调
+    2 创建加入组请求
+    3 消费者发送加入组请求，采用组合模式，返回一个新的异步请求对象，并执行回调函数
+    4 客户端通过轮询，确保 接收到响应，
+    5 异步请求完成后，执行回调方法，并将分区设置到消费者的订阅状态，并重置心跳定时任务。
+     */
     // visible for testing. Joins the group without starting the heartbeat thread.
     void joinGroupIfNeeded() {
         while (needRejoin() || rejoinIncomplete()) {
@@ -353,7 +361,7 @@ public abstract class AbstractCoordinator implements Closeable {
             client.poll(future);//阻塞，直至 服务端的响应
             resetJoinGroupFuture();
 
-            if (future.succeeded()) {//加入群组成功
+            if (future.succeeded()) {//加入群组成功，执行回调函数
                 needsJoinPrepare = true;
                 onJoinComplete(generation.generationId, generation.memberId, generation.protocol, future.value());
             } else {
@@ -435,7 +443,7 @@ public abstract class AbstractCoordinator implements Closeable {
 
         log.debug("Sending JoinGroup ({}) to coordinator {}", requestBuilder, this.coordinator);
         return client.send(coordinator, requestBuilder)
-                .compose(new JoinGroupResponseHandler());
+                .compose(new JoinGroupResponseHandler()); //组合模式： 异步请求适配器
     }
 
     private class JoinGroupResponseHandler extends CoordinatorResponseHandler<JoinGroupResponse, ByteBuffer> {
@@ -456,10 +464,12 @@ public abstract class AbstractCoordinator implements Closeable {
                         AbstractCoordinator.this.generation = new Generation(joinResponse.generationId(),
                                 joinResponse.memberId(), joinResponse.groupProtocol());
                         AbstractCoordinator.this.rejoinNeeded = false;
+                        //如果是主消费者，会传递响应结果。主消费者需要执行分区分配
                         if (joinResponse.isLeader()) {
                             //责任链模式，将future加入到当前这个RequestFuture所维护的List<Listener>中
                             onJoinLeader(joinResponse).chain(future);
                         } else {
+                            //如果是普通消费者，不需要响应结果。会立刻发送 同步组 请求
                             onJoinFollower().chain(future);
                         }
                     }
@@ -495,6 +505,7 @@ public abstract class AbstractCoordinator implements Closeable {
         }
     }
 
+    //普通消费者在收到 "加入组响应" 后，立即发送 "同步组请求"
     private RequestFuture<ByteBuffer> onJoinFollower() {
         // send follower's sync group with an empty assignment
         SyncGroupRequest.Builder requestBuilder =
@@ -505,9 +516,11 @@ public abstract class AbstractCoordinator implements Closeable {
         return sendSyncGroupRequest(requestBuilder);
     }
 
+    // 主消费者 在收到 "加入组响应" 后，执行分区分配工作， 然后发送 "同步组请求"
     private RequestFuture<ByteBuffer> onJoinLeader(JoinGroupResponse joinResponse) {
         try {
             // perform the leader synchronization and send back the assignment for the group
+            // 把分配结果 封装到 同步请求 中
             Map<String, ByteBuffer> groupAssignment = performAssignment(joinResponse.leaderId(), joinResponse.groupProtocol(),
                     joinResponse.members());
 
@@ -773,7 +786,7 @@ public abstract class AbstractCoordinator implements Closeable {
             }
         }
     }
-
+    //
     protected abstract class CoordinatorResponseHandler<R, T> extends RequestFutureAdapter<ClientResponse, T> {
         protected ClientResponse response;
 

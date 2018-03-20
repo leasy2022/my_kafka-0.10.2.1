@@ -21,12 +21,12 @@ import org.apache.kafka.common.requests.RequestHeader;
  */
 public final class ClientRequest {
 
-    private final String destination;
-    private final AbstractRequest.Builder<?> requestBuilder;
-    private final int correlationId;
+    private final String destination; //向谁发送：节点id的字符串格式
+    private final AbstractRequest.Builder<?> requestBuilder; //向node发送什么请求？
+    private final int correlationId; // 相关id
     private final String clientId;
     private final long createdTimeMs;
-    private final boolean expectResponse;
+    private final boolean expectResponse;//是否要求服务节点的响应
     private final RequestCompletionHandler callback;
 
     /**

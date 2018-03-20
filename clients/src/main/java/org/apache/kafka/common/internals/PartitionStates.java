@@ -38,6 +38,10 @@ import java.util.Set;
  * leadership changes, we will deviate from the optimal. If this turns out to be an issue in practice, we can improve
  * it by tracking the partitions per node or calling `set` every so often.
  */
+/*
+维护所有partiton的状态： 封装了一个 map，key是partiton，v是对应的状态
+
+ */
 public class PartitionStates<S> {
 
     private final LinkedHashMap<TopicPartition, S> map = new LinkedHashMap<>();
@@ -112,6 +116,7 @@ public class PartitionStates<S> {
     }
 
     private void update(Map<TopicPartition, S> partitionToState) {
+        //1 先按照 topic进行分组, 每个topic下面的partitions
         LinkedHashMap<String, List<TopicPartition>> topicToPartitions = new LinkedHashMap<>();
         for (TopicPartition tp : partitionToState.keySet()) {
             List<TopicPartition> partitions = topicToPartitions.get(tp.topic());
@@ -121,6 +126,7 @@ public class PartitionStates<S> {
             }
             partitions.add(tp);
         }
+        //2 按照分组后的topic，作为顺序；写入map中进行维护
         for (Map.Entry<String, List<TopicPartition>> entry : topicToPartitions.entrySet()) {
             for (TopicPartition tp : entry.getValue()) {
                 S state = partitionToState.get(tp);
